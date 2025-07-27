@@ -22,6 +22,8 @@ struct ToolStubConfig {
     blake3: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<u64>,
+    #[serde(skip_serializing_if = "is_zero")]
+    strip_components: usize,
     #[serde(skip_serializing_if = "indexmap::IndexMap::is_empty")]
     platforms: indexmap::IndexMap<String, PlatformConfig>,
 }
@@ -35,6 +37,12 @@ struct PlatformConfig {
     size: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bin: Option<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    strip_components: usize,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 /// [experimental] Generate a tool stub for HTTP-based tools
@@ -81,6 +89,10 @@ pub struct ToolStub {
     #[clap(long)]
     pub skip_download: bool,
 
+    /// Number of leading path components to strip from archive entries (0 = no stripping)
+    #[clap(long, default_value = "0")]
+    pub strip_components: usize,
+
     /// HTTP backend type to use
     #[clap(long, default_value = "http")]
     pub http: String,
@@ -123,6 +135,7 @@ impl ToolStub {
             url: None,
             blake3: None,
             size: None,
+            strip_components: self.strip_components,
             platforms: indexmap::IndexMap::new(),
         };
 
@@ -159,6 +172,7 @@ impl ToolStub {
                     blake3: None,
                     size: None,
                     bin: None,
+                    strip_components: self.strip_components,
                 };
 
                 // Set platform-specific bin path if explicitly provided
@@ -324,15 +338,6 @@ impl ToolStub {
         };
         file::untar(archive_path, &extracted_dir, &tar_opts)?;
 
-        // Check if strip_components would be applied during actual installation
-        let format = TarFormat::from_ext(
-            &archive_path
-                .extension()
-                .unwrap_or_default()
-                .to_string_lossy(),
-        );
-        let will_strip = file::should_strip_components(archive_path, format)?;
-
         // Find executable files
         let executables = self.find_executables(&extracted_dir)?;
         if executables.is_empty() {
@@ -343,12 +348,31 @@ impl ToolStub {
         let tool_name = self.get_tool_name();
         let selected_exe = self.select_best_binary(&executables, &tool_name)?;
 
-        // If strip_components will be applied, remove the first path component
-        if will_strip {
+        // Apply strip_components if specified by user
+        if self.strip_components > 0 {
             let path = std::path::Path::new(&selected_exe);
-            if let Ok(stripped) = path.strip_prefix(path.components().next().unwrap()) {
-                return Ok(stripped.to_string_lossy().to_string());
+            let mut components = path.components();
+
+            // Skip the specified number of components
+            for _ in 0..self.strip_components {
+                if components.next().is_none() {
+                    bail!(
+                        "strip_components value ({}) is greater than path depth",
+                        self.strip_components
+                    );
+                }
             }
+
+            // Reconstruct the path from remaining components
+            let remaining_path: std::path::PathBuf = components.collect();
+            if remaining_path.as_os_str().is_empty() {
+                bail!(
+                    "strip_components value ({}) removes entire path",
+                    self.strip_components
+                );
+            }
+
+            return Ok(remaining_path.to_string_lossy().to_string());
         }
 
         Ok(selected_exe)
@@ -489,5 +513,8 @@ static AFTER_LONG_HELP: &str = color_print::cstr!(
 
     Generate without downloading (faster):
     $ <bold>mise generate tool-stub ./bin/tool --url "https://example.com/tool.tar.gz" --skip-download</bold>
+
+    Generate with strip_components for archives with nested directories:
+    $ <bold>mise generate tool-stub ./bin/hello-world --url "https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz" --strip-components 1</bold>
 "#
 );

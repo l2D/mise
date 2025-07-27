@@ -6,7 +6,7 @@ echo "Testing tool-stub generation with hello-world test fixture..."
 
 # Test: Tool stub generation with test fixture archive (uses strip_components=1)
 echo "Testing tool-stub generation with hello-world archive..."
-assert_succeed "mise generate tool-stub ./bin/hello-world --url 'https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz'"
+assert_succeed "mise generate tool-stub ./bin/hello-world --url 'https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --strip-components 1"
 
 # Verify the generated stub is executable
 assert_succeed "test -x ./bin/hello-world"
@@ -18,16 +18,16 @@ assert_contains "cat ./bin/hello-world" 'url = "https://mise.jdx.dev/test-fixtur
 assert_contains "cat ./bin/hello-world" 'blake3 = "'
 assert_contains "cat ./bin/hello-world" 'size = '
 assert_contains "cat ./bin/hello-world" 'bin = "'
+assert_contains "cat ./bin/hello-world" 'strip_components = 1'
 
 echo "hello-world stub content:"
 cat ./bin/hello-world
 
 # Verify that strip_components=1 is properly handled in binary path detection
-# The bin path should be "bin/hello-world" not "hello-world-1.0.0/bin/hello-world"
-# because the top-level directory gets stripped during installation
-# TODO: This currently fails - the binary path detection needs to be fixed for strip_components
-echo "Current bin path (should be 'bin/hello-world' after strip_components fix):"
-grep 'bin = ' ./bin/hello-world || true
+# With strip_components=1, the generator should adjust the detected binary path
+# by removing the first path component during generation
+echo "Verifying binary path is correctly adjusted for strip_components=1:"
+assert_contains "cat ./bin/hello-world" 'bin = "bin/hello-world"'
 
 # Test that the stub actually works by executing it
 echo "Testing that the generated hello-world stub actually works..."
@@ -35,12 +35,13 @@ assert "./bin/hello-world" "hello world"
 
 # Test with platform-specific URLs (testing platform-specific bin field logic)
 echo "Testing hello-world with platform-specific configuration..."
-assert_succeed "mise generate tool-stub ./bin/hello-platform --platform 'linux-x64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --platform 'macos-arm64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz'"
+assert_succeed "mise generate tool-stub ./bin/hello-platform --platform 'linux-x64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --platform 'macos-arm64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --strip-components 1"
 
 # Should have platform-specific configs but global bin since all platforms use same archive
 assert_contains "cat ./bin/hello-platform" "[platforms.linux-x64]"
 assert_contains "cat ./bin/hello-platform" "[platforms.macos-arm64]"
 assert_contains "cat ./bin/hello-platform" 'bin = "'
+assert_contains "cat ./bin/hello-platform" 'strip_components = 1'
 
 echo "hello-platform stub content:"
 cat ./bin/hello-platform

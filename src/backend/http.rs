@@ -301,6 +301,10 @@ impl Backend for HttpBackend {
         // Template the URL with actual values
         let url = template_string(&url_template, &tv);
 
+        // Look up platform-specific strip_components, fall back to global
+        let strip_components = lookup_platform_key(&opts, "strip_components")
+            .or_else(|| opts.get("strip_components").cloned());
+
         // Download
         let filename = get_filename_from_url(&url);
         let file_path = tv.download_path().join(&filename);
@@ -327,7 +331,21 @@ impl Backend for HttpBackend {
             ctx.pr.set_message("using cached tarball".into());
         } else {
             ctx.pr.set_message("extracting to cache".into());
-            self.extract_to_cache(&file_path, &cache_key, &url, &tv, &opts, Some(&ctx.pr))?;
+            // Create modified opts with resolved strip_components
+            let mut resolved_opts = opts.clone();
+            if let Some(strip_val) = strip_components {
+                resolved_opts
+                    .opts
+                    .insert("strip_components".to_string(), strip_val);
+            }
+            self.extract_to_cache(
+                &file_path,
+                &cache_key,
+                &url,
+                &tv,
+                &resolved_opts,
+                Some(&ctx.pr),
+            )?;
         }
 
         // Create symlink from install directory to cache
