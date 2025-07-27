@@ -35,7 +35,7 @@ assert "./bin/hello-world" "hello world"
 
 # Test with platform-specific URLs (testing platform-specific bin field logic)
 echo "Testing hello-world with platform-specific configuration..."
-assert_succeed "mise generate tool-stub ./bin/hello-platform --platform 'linux-x64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --platform 'macos-arm64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --strip-components 1"
+assert_succeed "mise generate tool-stub ./bin/hello-platform --platform-url 'linux-x64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --platform-url 'macos-arm64:https://mise.jdx.dev/test-fixtures/hello-world-1.0.0.tar.gz' --strip-components 1"
 
 # Should have platform-specific configs but global bin since all platforms use same archive
 assert_contains "cat ./bin/hello-platform" "[platforms.linux-x64]"
